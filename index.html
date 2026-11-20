@@ -1,1 +1,232 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Order & Payment</title>
+  <style>
+    * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
+    body {
+      background: #121212;
+      color: #f4f4f5;
+      display: flex;
+      justify-content: center;
+      padding: 24px 16px;
+      margin: 0;
+    }
+    .card {
+      background: #1e1e22;
+      border: 1px solid #2e2e34;
+      border-radius: 14px;
+      width: 100%;
+      max-width: 440px;
+      padding: 24px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+    }
+    h2 { margin: 0 0 6px; font-size: 1.3rem; }
+    p.sub { margin: 0 0 20px; color: #a1a1aa; font-size: 0.9rem; }
+    label { display: block; font-size: 0.85rem; margin-bottom: 6px; color: #d4d4d8; }
+    input, select, textarea {
+      width: 100%;
+      padding: 10px 12px;
+      margin-bottom: 16px;
+      border-radius: 8px;
+      border: 1px solid #3f3f46;
+      background: #141417;
+      color: #fff;
+      font-size: 0.95rem;
+    }
+    .total-box {
+      background: #27272a;
+      padding: 14px;
+      border-radius: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 18px;
+      font-weight: 600;
+    }
+    .total-price { color: #4ade80; font-size: 1.2rem; }
+    button {
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      background: #6366f1;
+      color: white;
+      font-weight: 600;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    button:hover { background: #4f46e5; }
+    .btn-secondary { background: #3f3f46; margin-top: 8px; }
+    .btn-secondary:hover { background: #52525b; }
+    .hidden { display: none; }
+    .pay-info {
+      background: #141417;
+      border: 1px dashed #52525b;
+      padding: 16px;
+      border-radius: 10px;
+      text-align: center;
+      margin-bottom: 16px;
+    }
+    .qr-placeholder {
+      width: 140px;
+      height: 140px;
+      margin: 10px auto;
+      background: #fff;
+      color: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      border-radius: 8px;
+      font-size: 0.85rem;
+    }
+    .badge {
+      display: inline-block;
+      background: #166534;
+      color: #86efac;
+      padding: 4px 10px;
+      border-radius: 99px;
+      font-size: 0.8rem;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
 
+  <!-- STEP 1: FORM ORDER -->
+  <div class="card" id="step-order">
+    <h2>Form Order & Pembayaran</h2>
+    <p class="sub">Isi detail pesanan di bawah untuk lanjut ke pembayaran.</p>
+
+    <label>Nama Pemesan</label>
+    <input type="text" id="cust-name" placeholder="Contoh: Budi" required />
+
+    <label>Pilih Paket Layanan</label>
+    <select id="package" onchange="updateTotal()">
+      <option value="50000">Paket Basic - Rp 50.000</option>
+      <option value="120000">Paket Standard - Rp 120.000</option>
+      <option value="250000">Paket Full / Premium - Rp 250.000</option>
+    </select>
+
+    <label>Jumlah (Qty)</label>
+    <input type="number" id="qty" value="1" min="1" onchange="updateTotal()" oninput="updateTotal()" />
+
+    <label>Metode Pembayaran</label>
+    <select id="pay-method">
+      <option value="QRIS">QRIS (Semua E-Wallet & M-Banking)</option>
+      <option value="BCA">Transfer Bank BCA</option>
+      <option value="DANA">E-Wallet DANA / GoPay</option>
+    </select>
+
+    <label>Catatan (Opsional)</label>
+    <textarea id="notes" rows="2" placeholder="Tulis request atau detail tambahan..."></textarea>
+
+    <div class="total-box">
+      <span>Total Bayar</span>
+      <span class="total-price" id="display-total">Rp 50.000</span>
+    </div>
+
+    <button onclick="goToPayment()">Lanjut Bayar</button>
+  </div>
+
+  <!-- STEP 2: HALAMAN PEMBAYARAN -->
+  <div class="card hidden" id="step-pay">
+    <h2>Selesaikan Pembayaran</h2>
+    <p class="sub" id="inv-id">Invoice #INV-001</p>
+
+    <div class="total-box">
+      <span>Tagihan</span>
+      <span class="total-price" id="pay-amount">Rp 50.000</span>
+    </div>
+
+    <div class="pay-info" id="pay-details"></div>
+
+    <button onclick="confirmPayment()">Saya Sudah Bayar</button>
+    <button class="btn-secondary" onclick="backToOrder()">Ubah Pesanan</button>
+  </div>
+
+  <!-- STEP 3: STRUK LUNAS -->
+  <div class="card hidden" id="step-done" style="text-align: center;">
+    <span class="badge">Pembayaran Dikonfirmasi</span>
+    <h2>Terima Kasih!</h2>
+    <p class="sub" id="receipt-text"></p>
+    <button onclick="location.reload()">Buat Order Baru</button>
+  </div>
+
+  <script>
+    const formatRp = (num) => "Rp " + num.toLocaleString("id-ID");
+
+    function getTotal() {
+      const price = parseInt(document.getElementById("package").value) || 0;
+      const qty = Math.max(1, parseInt(document.getElementById("qty").value) || 1);
+      return price * qty;
+    }
+
+    function updateTotal() {
+      document.getElementById("display-total").innerText = formatRp(getTotal());
+    }
+
+    function goToPayment() {
+      const name = document.getElementById("cust-name").value.trim();
+      if (!name) {
+        alert("Isi nama pemesan dulu ya!");
+        return;
+      }
+
+      const method = document.getElementById("pay-method").value;
+      const total = formatRp(getTotal());
+      const invCode = "INV-" + Math.floor(1000 + Math.random() * 9000);
+
+      document.getElementById("inv-id").innerText = `Invoice #${invCode} • a.n. ${name}`;
+      document.getElementById("pay-amount").innerText = total;
+
+      const box = document.getElementById("pay-details");
+      if (method === "QRIS") {
+        box.innerHTML = `
+          <div>Scan QRIS di bawah ini:</div>
+          <div class="qr-placeholder">[ QR CODE ]</div>
+          <small style="color:#a1a1aa">Otomatis terdeteksi semua aplikasi bank & e-wallet</small>
+        `;
+      } else if (method === "BCA") {
+        box.innerHTML = `
+          <div>Transfer ke Rekening BCA:</div>
+          <h3 style="margin:8px 0; letter-spacing:1px;">1234 5678 90</h3>
+          <div style="font-size:0.85rem; color:#a1a1aa;">a.n. Nama Kamu</div>
+        `;
+      } else {
+        box.innerHTML = `
+          <div>Kirim ke Nomor DANA / GoPay:</div>
+          <h3 style="margin:8px 0; letter-spacing:1px;">0812-3456-7890</h3>
+          <div style="font-size:0.85rem; color:#a1a1aa;">a.n. Nama Kamu</div>
+        `;
+      }
+
+      document.getElementById("step-order").classList.add("hidden");
+      document.getElementById("step-pay").classList.remove("hidden");
+    }
+
+    function backToOrder() {
+      document.getElementById("step-pay").classList.add("hidden");
+      document.getElementById("step-order").classList.remove("hidden");
+    }
+
+    function confirmPayment() {
+      const name = document.getElementById("cust-name").value;
+      const pkgText = document.getElementById("package").selectedOptions[0].text;
+      const qty = document.getElementById("qty").value;
+      const total = formatRp(getTotal());
+
+      document.getElementById("receipt-text").innerHTML = `
+        Pesanan atas nama <b>${name}</b> (${qty}x ${pkgText}) sebesar <b>${total}</b> telah tercatat.
+      `;
+      document.getElementById("step-pay").classList.add("hidden");
+      document.getElementById("step-done").classList.remove("hidden");
+    }
+  </script>
+
+</body>
+</html>
